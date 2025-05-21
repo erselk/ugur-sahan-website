@@ -1,9 +1,22 @@
 import * as React from "react"
+import { Toast, ToastAction } from "@/components/ui/toast"
 
-import type {
-  ToastActionElement,
-  ToastProps,
-} from "@/components/ui/toast"
+export type ToastActionType = "default" | "destructive"
+
+export type ToastActionElement = React.ReactElement<typeof ToastAction>
+
+export type ToastProps = React.ComponentPropsWithoutRef<typeof Toast>
+
+export type ToastActionProps = React.ComponentPropsWithoutRef<typeof ToastAction>
+
+const TOAST_ACTION_TYPES = {
+  ADD_TOAST: "ADD_TOAST",
+  UPDATE_TOAST: "UPDATE_TOAST",
+  DISMISS_TOAST: "DISMISS_TOAST",
+  REMOVE_TOAST: "REMOVE_TOAST",
+} as const
+
+type ToastActionTypes = typeof TOAST_ACTION_TYPES
 
 const TOAST_LIMIT = 1
 const TOAST_REMOVE_DELAY = 1000000
@@ -15,13 +28,6 @@ type ToasterToast = ToastProps & {
   action?: ToastActionElement
 }
 
-const actionTypes = {
-  ADD_TOAST: "ADD_TOAST",
-  UPDATE_TOAST: "UPDATE_TOAST",
-  DISMISS_TOAST: "DISMISS_TOAST",
-  REMOVE_TOAST: "REMOVE_TOAST",
-} as const
-
 let count = 0
 
 function genId() {
@@ -29,7 +35,7 @@ function genId() {
   return count.toString()
 }
 
-type ActionType = typeof actionTypes
+type ActionType = typeof TOAST_ACTION_TYPES
 
 type Action =
   | {

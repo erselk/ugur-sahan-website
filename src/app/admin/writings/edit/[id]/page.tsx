@@ -29,7 +29,7 @@ const categories = [
 ];
 
 // Tip tanımlamaları
-interface PostData {
+type PostData = {
   title: { [key: string]: string };
   content: { [key: string]: string };
   excerpt: { [key: string]: string };
@@ -43,9 +43,9 @@ interface PostData {
   sourceLanguage: 'tr' | 'en';
   targetLanguage: 'tr' | 'en';
   should_translate: boolean;
-}
+};
 
-export default function EditWritingPage() {
+const EditWritingPage = () => {
   const router = useRouter();
   const pathname = usePathname();
   const params = useParams();
@@ -1008,4 +1008,6 @@ export default function EditWritingPage() {
       </motion.div>
     </div>
   );
-} 
+};
+
+export default EditWritingPage; 

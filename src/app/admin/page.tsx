@@ -17,16 +17,16 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-interface DashboardStats {
+type DashboardStats = {
   totalMessages: number;
   unreadMessages: number;
   totalPosts: number;
   publishedPosts: number;
   totalViews: number;
   monthlyViews: number;
-}
+};
 
-export default function DashboardPage() {
+const DashboardPage = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -171,4 +171,6 @@ export default function DashboardPage() {
       </div>
     </div>
   );
-} 
+};
+
+export default DashboardPage; 

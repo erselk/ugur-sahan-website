@@ -315,7 +315,7 @@ export async function POST(request: Request) {
     }
 
     // Slug oluştur (sadece İngilizce başlıktan)
-    let englishTitle = sourceLanguage === 'en' 
+    const englishTitle = sourceLanguage === 'en' 
       ? title[sourceLanguage]
       : await translateText(title[sourceLanguage], sourceLanguage, 'en');
 

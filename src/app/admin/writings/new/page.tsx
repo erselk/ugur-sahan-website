@@ -30,7 +30,7 @@ const categories = [
   'Tadımlar'
 ];
 
-interface PostData {
+type PostData = {
   title: { [key: string]: string };
   content: { [key: string]: string };
   excerpt: { [key: string]: string };
@@ -41,9 +41,9 @@ interface PostData {
   author_id: string;
   reading_time: number;
   slug: string;
-}
+};
 
-interface FormDataState {
+type FormDataState = {
   title: { [key: string]: string };
   content: { [key: string]: string };
   excerpt: { [key: string]: string };
@@ -52,9 +52,9 @@ interface FormDataState {
   image_url: string;
   created_at: string;
   reading_time: string;
-}
+};
 
-export default function NewWritingPage() {
+const NewWritingPage = () => {
   const router = useRouter();
   const pathname = usePathname();
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -358,7 +358,7 @@ export default function NewWritingPage() {
       }
 
       // Slug oluştur (sadece İngilizce başlıktan)
-      let englishTitle = formData.title['en'] || 
+      const englishTitle = formData.title['en'] || 
         (sourceLanguage === 'en' 
           ? formData.title[sourceLanguage]
           : await translateText(formData.title[sourceLanguage], sourceLanguage, 'en'));
@@ -868,4 +868,6 @@ export default function NewWritingPage() {
       </motion.div>
     </div>
   );
-} 
+};
+
+export default NewWritingPage; 

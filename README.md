@@ -138,6 +138,18 @@ Yazı sistemi aşağıdaki özellikleri içerir:
 
 ## Son Değişiklikler
 
+- Next.js 14 route handler'ları resmi dokümantasyona göre güncellendi
+  - Route handler parametreleri Next.js 14'ün önerdiği şekilde düzenlendi
+  - API route'ları optimize edildi ve tip güvenliği artırıldı
+  - Tüm route handler'lar Next.js 14'e tam uyumlu hale getirildi
+  - Route handler'lar için destructured `params` parametresi kullanıldı
+- ESLint ve TypeScript hataları giderildi
+  - `@typescript-eslint/no-unsafe-declaration-merging` hatası çözüldü
+  - Interface'ler type olarak yeniden tanımlandı
+  - Component'ler arrow function olarak güncellendi
+  - Tip tanımlamaları Next.js 14 standartlarına uygun hale getirildi
+  - Tüm component'ler ve sayfalar ESLint kurallarına uygun hale getirildi
+  - Yazılar sayfası ve yeni yazı sayfası güncellendi
 - Slug yapısı güncellendi
   - Slug'lar artık tek bir İngilizce değer olarak tutulacak
   - Veritabanındaki `slug` alanı JSONB'den TEXT'e dönüştürüldü

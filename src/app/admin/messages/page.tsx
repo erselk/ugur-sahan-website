@@ -13,7 +13,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-interface Message {
+type MessageType = {
   id: string;
   name: string;
   email: string;
@@ -21,13 +21,13 @@ interface Message {
   message: string;
   created_at: string;
   is_read: boolean;
-}
+};
 
-export default function MessagesPage() {
-  const [messages, setMessages] = useState<Message[]>([]);
+const MessagesPage = () => {
+  const [messages, setMessages] = useState<MessageType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+  const [selectedMessage, setSelectedMessage] = useState<MessageType | null>(null);
 
   useEffect(() => {
     fetchMessages();
@@ -201,4 +201,6 @@ export default function MessagesPage() {
       </div>
     </div>
   );
-} 
+};
+
+export default MessagesPage; 

@@ -13,7 +13,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-interface Writing {
+type Writing = {
   id: number;
   title: { tr: string; en: string };
   slug: string;
@@ -27,9 +27,9 @@ interface Writing {
   category: string;
   tags: { tr: string[]; en: string[] } | null;
   image_url: string;
-}
+};
 
-export default function WritingsPage() {
+const WritingsPage = () => {
   const [writings, setWritings] = useState<Writing[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -244,4 +244,6 @@ export default function WritingsPage() {
       </div>
     </div>
   );
-} 
+};
+
+export default WritingsPage; 
