@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { createBrowserClient } from '@supabase/ssr';
+import { translateText } from '@/lib/translate';
 
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -29,21 +30,48 @@ const categories = [
   'Tadımlar'
 ];
 
+interface PostData {
+  title: { [key: string]: string };
+  content: { [key: string]: string };
+  excerpt: { [key: string]: string };
+  category: string;
+  tags: { [key: string]: string[] } | null;
+  image_url: string;
+  created_at: string;
+  author_id: string;
+  reading_time: number;
+  slug: string;
+}
+
+interface FormDataState {
+  title: { [key: string]: string };
+  content: { [key: string]: string };
+  excerpt: { [key: string]: string };
+  category: string;
+  tags: { [key: string]: string[] };
+  image_url: string;
+  created_at: string;
+  reading_time: string;
+}
+
 export default function NewWritingPage() {
   const router = useRouter();
   const pathname = usePathname();
-  const [isLoading, setIsLoading] = useState(false);
-  const [showAlert, setShowAlert] = useState(false);
-  const [shouldTranslate, setShouldTranslate] = useState(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [showAlert, setShowAlert] = useState<boolean>(false);
+  const [showValidationAlert, setShowValidationAlert] = useState(false);
+  const [shouldTranslate, setShouldTranslate] = useState<boolean>(false);
   const [sourceLanguage, setSourceLanguage] = useState<'tr' | 'en'>('tr');
-  const [isUploading, setIsUploading] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-  const [formData, setFormData] = useState({
+  const targetLanguage = sourceLanguage === 'tr' ? 'en' : 'tr';
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState<boolean>(true);
+  const [validationErrors, setValidationErrors] = useState<{ source: string[], target: string[] }>({ source: [], target: [] });
+  const [formData, setFormData] = useState<FormDataState>({
     title: { tr: '', en: '' },
     content: { tr: '', en: '' },
     category: '',
-    tags: [] as string[],
+    tags: { tr: [], en: [] },
     image_url: '/ugursahan.webp',
     created_at: format(new Date(), 'dd.MM.yyyy'),
     excerpt: { tr: '', en: '' },
@@ -126,19 +154,47 @@ export default function NewWritingPage() {
   // Tarih formatını dönüştüren yardımcı fonksiyonlar
   const formatDateForInput = (dateStr: string) => {
     try {
-      const date = parse(dateStr, 'dd.MM.yyyy', new Date());
-      return format(date, 'yyyy-MM-dd');
-    } catch {
-      return dateStr;
+      console.log('formatDateForInput giriş:', dateStr);
+      // ISO 8601 formatındaki tarihi parse et
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) {
+        throw new Error('Geçersiz tarih');
+      }
+      const formatted = format(date, 'yyyy-MM-dd');
+      console.log('formatDateForInput çıkış:', formatted);
+      return formatted;
+    } catch (error) {
+      console.error('formatDateForInput hatası:', error);
+      // Hata durumunda GG.AA.YYYY formatındaki tarihi parse etmeyi dene
+      try {
+        const date = parse(dateStr, 'dd.MM.yyyy', new Date());
+        return format(date, 'yyyy-MM-dd');
+      } catch {
+        return dateStr;
+      }
     }
   };
 
   const formatDateForDisplay = (dateStr: string) => {
     try {
-      const date = parse(dateStr, 'yyyy-MM-dd', new Date());
-      return format(date, 'dd.MM.yyyy');
-    } catch {
-      return dateStr;
+      console.log('formatDateForDisplay giriş:', dateStr);
+      // ISO 8601 formatındaki tarihi parse et
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) {
+        throw new Error('Geçersiz tarih');
+      }
+      const formatted = format(date, 'dd.MM.yyyy');
+      console.log('formatDateForDisplay çıkış:', formatted);
+      return formatted;
+    } catch (error) {
+      console.error('formatDateForDisplay hatası:', error);
+      // Hata durumunda yyyy-MM-dd formatındaki tarihi parse etmeyi dene
+      try {
+        const date = parse(dateStr, 'yyyy-MM-dd', new Date());
+        return format(date, 'dd.MM.yyyy');
+      } catch {
+        return dateStr;
+      }
     }
   };
 
@@ -183,26 +239,24 @@ export default function NewWritingPage() {
       missingFieldsSource.push(requiredFieldsLabels.reading_time);
     }
 
-    if (missingFieldsSource.length > 0) {
-      toast.error(`Lütfen ${sourceLanguage === 'tr' ? 'Türkçe' : 'İngilizce'} ${missingFieldsSource.join(', ')} alanlarını doldurun`);
-      return;
-    }
-
     // Çeviri istenmiyorsa (shouldTranslateParam false ise), hedef dildeki başlık ve içeriği de kontrol et
+    const missingFieldsTarget = [];
     if (!shouldTranslateParam) {
-      const targetLanguage = sourceLanguage === 'tr' ? 'en' : 'tr';
-      const missingFieldsTarget = [];
       if (!formData.title[targetLanguage]) {
         missingFieldsTarget.push(requiredFieldsLabels.title);
       }
       if (!formData.content[targetLanguage]) {
         missingFieldsTarget.push(requiredFieldsLabels.content);
       }
+    }
 
-      if (missingFieldsTarget.length > 0) {
-        toast.error(`Lütfen ${targetLanguage === 'tr' ? 'Türkçe' : 'İngilizce'} dilinde ${missingFieldsTarget.join(', ')} alanlarını doldurun`);
-        return;
-      }
+    if (missingFieldsSource.length > 0 || missingFieldsTarget.length > 0) {
+      setValidationErrors({
+        source: missingFieldsSource,
+        target: missingFieldsTarget
+      });
+      setShowValidationAlert(true);
+      return;
     }
 
     // Form verileri geçerliyse, state'i güncelle ve alert'i göster
@@ -223,36 +277,99 @@ export default function NewWritingPage() {
         return;
       }
 
-      const targetLanguage = sourceLanguage === 'tr' ? 'en' : 'tr';
-      const { title, content, excerpt, category, tags } = formData;
-      const readingTimeInt = calculateReadingTime(content[sourceLanguage]);
-      const isoDate = formatDateForInput(formData.created_at);
-      const hasBothLanguages = title[sourceLanguage] && title[targetLanguage];
+      // Tarihi kontrol et ve dönüştür
+      let isoDate: string;
+      try {
+        if (!/^\d{2}\.\d{2}\.\d{4}$/.test(formData.created_at)) {
+          throw new Error('Geçersiz tarih formatı. Tarih GG.AA.YYYY formatında olmalıdır.');
+        }
 
-      const postData = {
-        title: { [sourceLanguage]: title[sourceLanguage] },
-        content: { [sourceLanguage]: content[sourceLanguage] },
-        excerpt: { [sourceLanguage]: excerpt[sourceLanguage] || content[sourceLanguage].slice(0, 200) + '...' },
-        category: category,
-        tags: tags ? { [sourceLanguage]: tags } : null,
-        image_url: formData.image_url,
-        created_at: isoDate,
-        author_id: session.user.id,
-        reading_time: readingTimeInt
-      };
+        const [day, month, year] = formData.created_at.split('.').map(Number);
+        
+        if (isNaN(day) || isNaN(month) || isNaN(year) ||
+            day < 1 || day > 31 ||
+            month < 1 || month > 12 ||
+            year < 1900 || year > 2100) {
+          throw new Error('Geçersiz tarih değerleri');
+        }
+
+        const date = new Date(year, month - 1, day);
+        
+        if (date.getMonth() !== month - 1) {
+          throw new Error('Geçersiz tarih (örn: 31.02.2024)');
+        }
+
+        isoDate = format(date, 'yyyy-MM-dd');
+      } catch (error) {
+        console.error('Tarih dönüştürme hatası:', error);
+        toast.error(error instanceof Error ? error.message : 'Geçersiz tarih formatı');
+        return;
+      }
+
+      // Eğer çeviri yapılacaksa, önce çevirileri yap
+      let translatedTitle = formData.title[targetLanguage];
+      let translatedContent = formData.content[targetLanguage];
+      let translatedExcerpt = formData.excerpt[targetLanguage];
+      let translatedTags: { [key: string]: string[] } | null = null;
+
+      if (shouldTranslate) {
+        try {
+          // Başlık çevirisi
+          translatedTitle = await translateText(formData.title[sourceLanguage], sourceLanguage, targetLanguage);
+          
+          // İçerik çevirisi
+          translatedContent = await translateText(formData.content[sourceLanguage], sourceLanguage, targetLanguage);
+          
+          // Özet çevirisi (eğer varsa)
+          if (formData.excerpt[sourceLanguage]) {
+            translatedExcerpt = await translateText(formData.excerpt[sourceLanguage], sourceLanguage, targetLanguage);
+          } else {
+            // Özet yoksa içeriğin ilk 200 karakterini çevir
+            translatedExcerpt = await translateText(
+              formData.content[sourceLanguage].slice(0, 200) + '...',
+              sourceLanguage,
+              targetLanguage
+            );
+          }
+
+          // Etiketleri çevir
+          if (formData.tags[sourceLanguage].length > 0) {
+            const translatedTagsArray = await Promise.all(
+              formData.tags[sourceLanguage].map(tag =>
+                translateText(tag, sourceLanguage, targetLanguage)
+              )
+            );
+            translatedTags = {
+              [sourceLanguage]: formData.tags[sourceLanguage],
+              [targetLanguage]: translatedTagsArray
+            };
+          }
+        } catch (error) {
+          console.error('Çeviri hatası:', error);
+          toast.error('Çeviri sırasında bir hata oluştu');
+          return;
+        }
+      } else {
+        // Çeviri yapılmayacaksa, mevcut etiketleri kullan
+        translatedTags = formData.tags[sourceLanguage].length > 0 ? {
+          [sourceLanguage]: formData.tags[sourceLanguage],
+          [targetLanguage]: formData.tags[targetLanguage]
+        } : null;
+      }
 
       // Slug oluştur (sadece İngilizce başlıktan)
-      let englishTitle = sourceLanguage === 'en' 
-        ? title[sourceLanguage]
-        : await translateText(title[sourceLanguage], sourceLanguage, 'en');
+      let englishTitle = formData.title['en'] || 
+        (sourceLanguage === 'en' 
+          ? formData.title[sourceLanguage]
+          : await translateText(formData.title[sourceLanguage], sourceLanguage, 'en'));
 
-      // Türkçe karakterleri dönüştür ve büyük harfleri küçült
+      // Türkçe karakterleri dönüştür ve slug oluştur
       const turkishToEnglish: { [key: string]: string } = {
         'Ğ': 'g', 'Ü': 'u', 'Ş': 's', 'İ': 'i', 'Ö': 'o', 'Ç': 'c',
         'ğ': 'g', 'ü': 'u', 'ş': 's', 'ı': 'i', 'ö': 'o', 'ç': 'c'
       };
 
-      postData.slug = englishTitle
+      const slug = englishTitle
         .split('')
         .map(char => turkishToEnglish[char] || char.toLowerCase())
         .join('')
@@ -260,46 +377,31 @@ export default function NewWritingPage() {
         .replace(/-+/g, '-')
         .replace(/^-|-$/g, '');
 
-      // Çeviri isteniyorsa ve diğer dil için veri yoksa çeviri yap
-      if (shouldTranslate && !hasBothLanguages) {
-        try {
-          // Çevirileri sırayla yap
-          const translatedTitle = await translateText(title[sourceLanguage], sourceLanguage, targetLanguage);
-          const translatedContent = await translateText(content[sourceLanguage], sourceLanguage, targetLanguage);
-          const translatedExcerpt = await translateText(excerpt[sourceLanguage], sourceLanguage, targetLanguage);
+      // Her iki dildeki verileri içeren post verisi
+      const postData: PostData = {
+        title: {
+          [sourceLanguage]: formData.title[sourceLanguage],
+          [targetLanguage]: translatedTitle
+        },
+        content: {
+          [sourceLanguage]: formData.content[sourceLanguage],
+          [targetLanguage]: translatedContent
+        },
+        excerpt: {
+          [sourceLanguage]: formData.excerpt[sourceLanguage] || formData.content[sourceLanguage].slice(0, 200) + '...',
+          [targetLanguage]: translatedExcerpt
+        },
+        category: formData.category,
+        tags: translatedTags,
+        image_url: formData.image_url,
+        created_at: isoDate,
+        author_id: session.user.id,
+        reading_time: parseFloat(formData.reading_time),
+        slug
+      };
 
-          // Çevirileri ekle
-          postData.title[targetLanguage] = translatedTitle;
-          postData.content[targetLanguage] = translatedContent;
-          postData.excerpt[targetLanguage] = translatedExcerpt;
-
-          // Etiketleri çevir
-          if (tags) {
-            const translatedTags = [];
-            for (const tag of tags) {
-              try {
-                const translatedTag = await translateText(tag, sourceLanguage, targetLanguage);
-                translatedTags.push(translatedTag);
-              } catch (error) {
-                console.error(`Etiket çevirisi başarısız oldu: ${tag}`, error);
-                translatedTags.push(tag); // Çeviri başarısız olursa orijinal etiketi kullan
-              }
-            }
-            postData.tags[targetLanguage] = translatedTags;
-          }
-        } catch (error) {
-          console.error('Translation error:', error);
-          throw new Error(error instanceof Error ? error.message : 'Çeviri işlemi başarısız oldu');
-        }
-      } else {
-        // Çeviri istenmiyorsa, diğer dildeki verileri ekle
-        postData.title[targetLanguage] = title[targetLanguage];
-        postData.content[targetLanguage] = content[targetLanguage];
-        postData.excerpt[targetLanguage] = excerpt[targetLanguage] || content[targetLanguage].slice(0, 200) + '...';
-        if (tags) {
-          postData.tags[targetLanguage] = tags;
-        }
-      }
+      // Debug için gönderilecek veriyi kontrol et
+      console.log('Gönderilecek veri:', JSON.stringify(postData, null, 2));
 
       // Yazıyı kaydet
       const response = await fetch('/api/posts', {
@@ -308,11 +410,7 @@ export default function NewWritingPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`
         },
-        body: JSON.stringify({
-          ...postData,
-          should_translate: shouldTranslate,
-          source_language: sourceLanguage
-        })
+        body: JSON.stringify(postData)
       });
 
       const data = await response.json();
@@ -381,6 +479,18 @@ export default function NewWritingPage() {
       setIsUploading(false);
       e.target.value = '';
     }
+  };
+
+  // Etiketleri işle
+  const handleTagsChange = (value: string) => {
+    console.log('Girilen değer:', value); // Debug için
+    setFormData({
+      ...formData,
+      tags: {
+        ...formData.tags,
+        [sourceLanguage]: [value] // Direkt olarak girilen değeri kullan
+      }
+    });
   };
 
   return (
@@ -560,17 +670,27 @@ export default function NewWritingPage() {
             <CardHeader>
               <CardTitle>Etiketler ve Okuma Süresi</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="tags">Etiketler</Label>
+                <div className="flex justify-between items-center">
+                  <Label htmlFor="tags">Etiketler</Label>
+                  <span className="text-sm text-muted-foreground">
+                    {formData.tags[sourceLanguage].length} etiket
+                  </span>
+                </div>
                 <Input
                   id="tags"
-                  placeholder="Etiketleri virgülle ayırarak girin"
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    tags: e.target.value.split(',').map(tag => tag.trim()).filter(Boolean)
-                  })}
+                  type="text"
+                  placeholder={`Etiketleri virgülle ayırarak girin (${sourceLanguage === 'tr' ? 'Türkçe' : 'English'})`}
+                  value={formData.tags[sourceLanguage][0] || ''} // İlk etiketi göster
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                    console.log('Input değişti:', e.target.value); // Debug için
+                    handleTagsChange(e.target.value);
+                  }}
                 />
+                <p className="text-sm text-muted-foreground">
+                  Etiketleri virgülle ayırarak girin. Örnek: etiket1,etiket2,etiket3
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="reading_time">Okuma Süresi (dakika) *</Label>
@@ -581,7 +701,7 @@ export default function NewWritingPage() {
                     min="1"
                     max="999"
                     value={formData.reading_time}
-                    onChange={(e) => {
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                       const value = e.target.value;
                       // Sadece pozitif tam sayıları kabul et
                       if (value === '' || /^[1-9]\d{0,2}$/.test(value)) {
@@ -704,6 +824,43 @@ export default function NewWritingPage() {
               <AlertDialogCancel>İptal</AlertDialogCancel>
               <AlertDialogAction onClick={handleConfirmSubmit}>
                 {shouldTranslate ? 'Çevir ve Kaydet' : 'Kaydet'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={showValidationAlert} onOpenChange={setShowValidationAlert}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Eksik Alanlar</AlertDialogTitle>
+              <AlertDialogDescription>
+                <div className="space-y-4">
+                  {validationErrors.source.length > 0 && (
+                    <div>
+                      <p className="font-medium mb-2">{sourceLanguage === 'tr' ? 'Türkçe' : 'İngilizce'} dilinde eksik alanlar:</p>
+                      <ul className="list-disc list-inside">
+                        {validationErrors.source.map((field, index) => (
+                          <li key={index}>{field}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {validationErrors.target.length > 0 && (
+                    <div>
+                      <p className="font-medium mb-2">{targetLanguage === 'tr' ? 'Türkçe' : 'İngilizce'} dilinde eksik alanlar:</p>
+                      <ul className="list-disc list-inside">
+                        {validationErrors.target.map((field, index) => (
+                          <li key={index}>{field}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction onClick={() => setShowValidationAlert(false)}>
+                Tamam
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

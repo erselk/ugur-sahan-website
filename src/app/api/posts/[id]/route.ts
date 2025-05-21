@@ -2,25 +2,39 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 
+async function getCookie(name: string) {
+  const cookieStore = await cookies();
+  return cookieStore.get(name)?.value;
+}
+
+async function setCookie(name: string, value: string, options: any) {
+  const cookieStore = await cookies();
+  cookieStore.set({ name, value, ...options });
+}
+
+async function deleteCookie(name: string, options: any) {
+  const cookieStore = await cookies();
+  cookieStore.set({ name, value: '', ...options });
+}
+
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
   try {
-    const cookieStore = cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
           get(name: string) {
-            return cookieStore.get(name)?.value;
+            return getCookie(name);
           },
           set(name: string, value: string, options: any) {
-            cookieStore.set({ name, value, ...options });
+            return setCookie(name, value, options);
           },
           remove(name: string, options: any) {
-            cookieStore.set({ name, value: '', ...options });
+            return deleteCookie(name, options);
           },
         },
       }
@@ -85,20 +99,19 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const cookieStore = cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
           get(name: string) {
-            return cookieStore.get(name)?.value;
+            return getCookie(name);
           },
           set(name: string, value: string, options: any) {
-            cookieStore.set({ name, value, ...options });
+            return setCookie(name, value, options);
           },
           remove(name: string, options: any) {
-            cookieStore.set({ name, value: '', ...options });
+            return deleteCookie(name, options);
           },
         },
       }
@@ -156,20 +169,19 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const cookieStore = cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
           get(name: string) {
-            return cookieStore.get(name)?.value;
+            return getCookie(name);
           },
           set(name: string, value: string, options: any) {
-            cookieStore.set({ name, value, ...options });
+            return setCookie(name, value, options);
           },
           remove(name: string, options: any) {
-            cookieStore.set({ name, value: '', ...options });
+            return deleteCookie(name, options);
           },
         },
       }

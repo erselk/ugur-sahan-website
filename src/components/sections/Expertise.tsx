@@ -3,6 +3,7 @@ import { GraduationCap, Briefcase, Award, Users, Code2, Palette } from "lucide-r
 import { useContext } from "react";
 import { LanguageContext } from "@/components/LanguageContext";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { TranslationKey } from "@/lib/i18n/useTranslation";
 
 const expertiseAreas = [
   {
@@ -131,10 +132,10 @@ export const Expertise = () => {
                   <area.icon className="w-6 h-6 text-[var(--color-primary)]" />
                 </motion.div>
                 <h3 className="text-xl font-semibold mb-2 group-hover:text-[var(--color-primary)] transition-colors">
-                  {t(`home.expertise.${area.key}.title`)}
+                  {t(`home.expertise.${area.key}.title` as TranslationKey)}
                 </h3>
                 <p className="text-[var(--color-fg)]/70 group-hover:text-[var(--color-fg)]/90 transition-colors">
-                  {t(`home.expertise.${area.key}.description`)}
+                  {t(`home.expertise.${area.key}.description` as TranslationKey)}
                 </p>
               </div>
             </motion.div>

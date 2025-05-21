@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Sun, Moon, Languages, ChevronDown } from "lucide-react";
 import { LanguageContext } from "./LanguageContext";
 import { GB, TR } from 'country-flag-icons/react/3x2';
-import { useTranslation } from "@/lib/i18n/useTranslation";
+import { useTranslation, TranslationKey } from "@/lib/i18n/useTranslation";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -152,7 +152,7 @@ export function Header() {
                     )}
                   >
                     <Link href={item.href}>
-                      {t(item.key)}
+                      {t(item.key as TranslationKey)}
                     </Link>
                   </Button>
                   <AnimatePresence>
@@ -178,7 +178,7 @@ export function Header() {
                                   : "hover:bg-accent hover:text-accent-foreground"
                               )}
                             >
-                              {t(subItem.key)}
+                              {t(subItem.key as TranslationKey)}
                             </Link>
                           ))}
                         </div>
@@ -198,7 +198,7 @@ export function Header() {
                   )}
                 >
                   <Link href={item.href}>
-                    {t(item.key)}
+                    {t(item.key as TranslationKey)}
                   </Link>
                 </Button>
               )}

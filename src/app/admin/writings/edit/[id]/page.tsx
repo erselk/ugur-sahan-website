@@ -2,24 +2,23 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname, useParams } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { useSession } from 'next-auth/react';
+import { toast } from 'sonner';
+import { CalendarIcon, Loader2, Save, X, Image as ImageIcon } from 'lucide-react';
 import { format, parse } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { Calendar, Clock, Image as ImageIcon, Tag, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
+import { translateText } from '@/lib/translate';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { toast } from 'sonner';
-import { createBrowserClient } from '@supabase/ssr';
-
-const supabase = createBrowserClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { motion } from 'framer-motion';
 
 const categories = [
   'Şiirler',
@@ -41,6 +40,9 @@ interface PostData {
   author_id: string;
   reading_time: number;
   slug: { [key: string]: string };
+  sourceLanguage: 'tr' | 'en';
+  targetLanguage: 'tr' | 'en';
+  should_translate: boolean;
 }
 
 export default function EditWritingPage() {
@@ -52,16 +54,19 @@ export default function EditWritingPage() {
   const [showAlert, setShowAlert] = useState(false);
   const [shouldTranslate, setShouldTranslate] = useState(false);
   const [sourceLanguage, setSourceLanguage] = useState<'tr' | 'en'>('tr');
+  const targetLanguage = sourceLanguage === 'tr' ? 'en' : 'tr';
   const [isUploading, setIsUploading] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
+  const [showValidationAlert, setShowValidationAlert] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<{ source: string[], target: string[] }>({ source: [], target: [] });
   const [formData, setFormData] = useState({
     title: { tr: '', en: '' },
     content: { tr: '', en: '' },
     category: '',
-    tags: [] as string[],
+    tags: { tr: [] as string[], en: [] as string[] },
     image_url: '/ugursahan.webp',
     created_at: format(new Date(), 'dd.MM.yyyy'),
     excerpt: { tr: '', en: '' },
@@ -109,15 +114,9 @@ export default function EditWritingPage() {
     checkAuth();
 
     // Oturum değişikliklerini dinle
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (mounted) {
-        if (event === 'SIGNED_OUT' || !session) {
-          setIsAuthenticated(false);
-          router.replace('/admin/login?redirect=' + encodeURIComponent(pathname));
-        } else if (event === 'SIGNED_IN') {
-          setIsAuthenticated(true);
-          setIsCheckingAuth(false);
-        }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: any) => {
+      if (event === 'SIGNED_OUT') {
+        router.push('/admin/login');
       }
     });
 
@@ -125,7 +124,12 @@ export default function EditWritingPage() {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [router, pathname]);
+  }, [router]);
+
+  // Dil değişimini yöneten fonksiyon
+  const handleLanguageChange = (newSourceLanguage: 'tr' | 'en') => {
+    setSourceLanguage(newSourceLanguage);
+  };
 
   // Yazı verilerini getir
   useEffect(() => {
@@ -150,15 +154,42 @@ export default function EditWritingPage() {
         }
 
         const data = await response.json();
+        console.log('API\'den gelen veri:', data);
+        
+        // Etiketleri güvenli bir şekilde işle
+        const tags = {
+          tr: Array.isArray(data.tags?.tr) ? data.tags.tr : [],
+          en: Array.isArray(data.tags?.en) ? data.tags.en : []
+        };
+
+        // Başlık, içerik ve özet için varsayılan değerleri ayarla
+        const title = {
+          tr: data.title?.tr || '',
+          en: data.title?.en || ''
+        };
+
+        const content = {
+          tr: data.content?.tr || '',
+          en: data.content?.en || ''
+        };
+
+        const excerpt = {
+          tr: data.excerpt?.tr || '',
+          en: data.excerpt?.en || ''
+        };
+
+        // ISO 8601 formatındaki tarihi doğrudan kullan
+        const formattedDate = formatDateForDisplay(data.created_at);
+        console.log('Formatlanmış tarih:', formattedDate);
         
         setFormData({
-          title: data.title || { tr: '', en: '' },
-          content: data.content || { tr: '', en: '' },
+          title,
+          content,
           category: data.category || '',
-          tags: data.tags?.[sourceLanguage] || [],
+          tags,
           image_url: data.image_url || '/ugursahan.webp',
-          created_at: format(new Date(data.created_at), 'dd.MM.yyyy'),
-          excerpt: data.excerpt || { tr: '', en: '' },
+          created_at: formattedDate,
+          excerpt,
           reading_time: data.reading_time?.toString() || ''
         });
       } catch (error) {
@@ -171,7 +202,7 @@ export default function EditWritingPage() {
     if (isAuthenticated && writingId) {
       fetchWriting();
     }
-  }, [writingId, isAuthenticated, router, pathname]);
+  }, [writingId, isAuthenticated, router]);
 
   // Oturum kontrolü yapılırken loading göster
   if (isCheckingAuth) {
@@ -190,19 +221,63 @@ export default function EditWritingPage() {
   // Tarih formatını dönüştüren yardımcı fonksiyonlar
   const formatDateForInput = (dateStr: string) => {
     try {
-      const date = parse(dateStr, 'dd.MM.yyyy', new Date());
-      return format(date, 'yyyy-MM-dd');
-    } catch {
-      return dateStr;
+      console.log('formatDateForInput giriş:', dateStr);
+      
+      // Boş veya geçersiz tarih kontrolü
+      if (!dateStr) {
+        return format(new Date(), 'yyyy-MM-dd');
+      }
+
+      // GG.AA.YYYY formatındaki tarihi parse et
+      if (/^\d{2}\.\d{2}\.\d{4}$/.test(dateStr)) {
+        const [day, month, year] = dateStr.split('.').map(Number);
+        const date = new Date(year, month - 1, day);
+        if (!isNaN(date.getTime())) {
+          return format(date, 'yyyy-MM-dd');
+        }
+      }
+
+      // ISO formatındaki tarihi parse et
+      const date = new Date(dateStr);
+      if (!isNaN(date.getTime())) {
+        return format(date, 'yyyy-MM-dd');
+      }
+
+      // Hiçbir format çalışmazsa bugünün tarihini döndür
+      console.warn('Geçersiz tarih formatı, bugünün tarihi kullanılıyor:', dateStr);
+      return format(new Date(), 'yyyy-MM-dd');
+    } catch (error) {
+      console.error('formatDateForInput hatası:', error);
+      return format(new Date(), 'yyyy-MM-dd');
     }
   };
 
   const formatDateForDisplay = (dateStr: string) => {
     try {
-      const date = parse(dateStr, 'yyyy-MM-dd', new Date());
-      return format(date, 'dd.MM.yyyy');
-    } catch {
-      return dateStr;
+      console.log('formatDateForDisplay giriş:', dateStr);
+      
+      // Boş veya geçersiz tarih kontrolü
+      if (!dateStr) {
+        return format(new Date(), 'dd.MM.yyyy');
+      }
+
+      // GG.AA.YYYY formatındaysa direkt döndür
+      if (/^\d{2}\.\d{2}\.\d{4}$/.test(dateStr)) {
+        return dateStr;
+      }
+
+      // ISO formatındaki tarihi parse et
+      const date = new Date(dateStr);
+      if (!isNaN(date.getTime())) {
+        return format(date, 'dd.MM.yyyy');
+      }
+
+      // Hiçbir format çalışmazsa bugünün tarihini döndür
+      console.warn('Geçersiz tarih formatı, bugünün tarihi kullanılıyor:', dateStr);
+      return format(new Date(), 'dd.MM.yyyy');
+    } catch (error) {
+      console.error('formatDateForDisplay hatası:', error);
+      return format(new Date(), 'dd.MM.yyyy');
     }
   };
 
@@ -247,26 +322,24 @@ export default function EditWritingPage() {
       missingFieldsSource.push(requiredFieldsLabels.reading_time);
     }
 
-    if (missingFieldsSource.length > 0) {
-      toast.error(`Lütfen ${sourceLanguage === 'tr' ? 'Türkçe' : 'İngilizce'} ${missingFieldsSource.join(', ')} alanlarını doldurun`);
-      return;
-    }
-
     // Çeviri istenmiyorsa (shouldTranslateParam false ise), hedef dildeki başlık ve içeriği de kontrol et
+    const missingFieldsTarget = [];
     if (!shouldTranslateParam) {
-      const targetLanguage = sourceLanguage === 'tr' ? 'en' : 'tr';
-      const missingFieldsTarget = [];
       if (!formData.title[targetLanguage]) {
         missingFieldsTarget.push(requiredFieldsLabels.title);
       }
       if (!formData.content[targetLanguage]) {
         missingFieldsTarget.push(requiredFieldsLabels.content);
       }
+    }
 
-      if (missingFieldsTarget.length > 0) {
-        toast.error(`Lütfen ${targetLanguage === 'tr' ? 'Türkçe' : 'İngilizce'} dilinde ${missingFieldsTarget.join(', ')} alanlarını doldurun`);
-        return;
-      }
+    if (missingFieldsSource.length > 0 || missingFieldsTarget.length > 0) {
+      setValidationErrors({
+        source: missingFieldsSource,
+        target: missingFieldsTarget
+      });
+      setShowValidationAlert(true);
+      return;
     }
 
     // Form verileri geçerliyse, state'i güncelle ve alert'i göster
@@ -287,83 +360,120 @@ export default function EditWritingPage() {
         return;
       }
 
-      // Tarihi ISO formatına çevir
-      const formattedDate = format(parse(formData.created_at, 'dd.MM.yyyy', new Date()), 'yyyy-MM-dd');
+      // Tarihi kontrol et ve dönüştür
+      let isoDate: string;
+      try {
+        if (!/^\d{2}\.\d{2}\.\d{4}$/.test(formData.created_at)) {
+          throw new Error('Geçersiz tarih formatı. Tarih GG.AA.YYYY formatında olmalıdır.');
+        }
+
+        const [day, month, year] = formData.created_at.split('.').map(Number);
+        
+        if (isNaN(day) || isNaN(month) || isNaN(year) ||
+            day < 1 || day > 31 ||
+            month < 1 || month > 12 ||
+            year < 1900 || year > 2100) {
+          throw new Error('Geçersiz tarih değerleri');
+        }
+
+        const date = new Date(year, month - 1, day);
+        
+        if (date.getMonth() !== month - 1) {
+          throw new Error('Geçersiz tarih (örn: 31.02.2024)');
+        }
+
+        isoDate = format(date, 'yyyy-MM-dd');
+      } catch (error) {
+        console.error('Tarih dönüştürme hatası:', error);
+        toast.error(error instanceof Error ? error.message : 'Geçersiz tarih formatı');
+        return;
+      }
 
       const targetLanguage = sourceLanguage === 'tr' ? 'en' : 'tr';
-      const postData: PostData = {
-        title: { [sourceLanguage]: formData.title[sourceLanguage] },
-        content: { [sourceLanguage]: formData.content[sourceLanguage] },
-        excerpt: { [sourceLanguage]: formData.excerpt[sourceLanguage] || formData.content[sourceLanguage].slice(0, 200) + '...' },
-        category: formData.category,
-        tags: formData.tags.length > 0 ? { [sourceLanguage]: formData.tags } : null,
-        image_url: formData.image_url,
-        created_at: formattedDate,
-        author_id: session.user.id,
-        reading_time: parseFloat(formData.reading_time)
-      };
 
-      // Slug oluştur (sadece İngilizce başlıktan)
-      let englishTitle = sourceLanguage === 'en' 
-        ? formData.title[sourceLanguage]
-        : await translateText(formData.title[sourceLanguage], sourceLanguage, 'en');
+      // Eğer çeviri yapılacaksa, önce çevirileri yap
+      let translatedTitle = formData.title[targetLanguage];
+      let translatedContent = formData.content[targetLanguage];
+      let translatedExcerpt = formData.excerpt[targetLanguage];
+      let translatedTags = formData.tags[targetLanguage];
 
-      // Türkçe karakterleri dönüştür ve büyük harfleri küçült
-      const turkishToEnglish: { [key: string]: string } = {
-        'Ğ': 'g', 'Ü': 'u', 'Ş': 's', 'İ': 'i', 'Ö': 'o', 'Ç': 'c',
-        'ğ': 'g', 'ü': 'u', 'ş': 's', 'ı': 'i', 'ö': 'o', 'ç': 'c'
-      };
-
-      postData.slug = englishTitle
-        .split('')
-        .map(char => turkishToEnglish[char] || char.toLowerCase())
-        .join('')
-        .replace(/[^a-z0-9]/g, '-')
-        .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '');
-
-      // Çeviri isteniyorsa ve diğer dil için veri yoksa çeviri yap
-      if (shouldTranslate && !hasBothLanguages) {
+      if (shouldTranslate) {
         try {
-          // Çevirileri sırayla yap
-          const translatedTitle = await translateText(formData.title[sourceLanguage], sourceLanguage, targetLanguage);
-          const translatedContent = await translateText(formData.content[sourceLanguage], sourceLanguage, targetLanguage);
-          const translatedExcerpt = await translateText(formData.excerpt[sourceLanguage], sourceLanguage, targetLanguage);
-
-          // Çevirileri ekle
-          postData.title[targetLanguage] = translatedTitle;
-          postData.content[targetLanguage] = translatedContent;
-          postData.excerpt[targetLanguage] = translatedExcerpt;
+          // Başlık çevirisi
+          translatedTitle = await translateText(formData.title[sourceLanguage], sourceLanguage, targetLanguage);
+          
+          // İçerik çevirisi
+          translatedContent = await translateText(formData.content[sourceLanguage], sourceLanguage, targetLanguage);
+          
+          // Özet çevirisi (eğer varsa)
+          if (formData.excerpt[sourceLanguage]) {
+            translatedExcerpt = await translateText(formData.excerpt[sourceLanguage], sourceLanguage, targetLanguage);
+          } else {
+            // Özet yoksa içeriğin ilk 200 karakterini çevir
+            translatedExcerpt = await translateText(
+              formData.content[sourceLanguage].slice(0, 200) + '...',
+              sourceLanguage,
+              targetLanguage
+            );
+          }
 
           // Etiketleri çevir
-          if (formData.tags.length > 0) {
-            const translatedTags = [];
-            for (const tag of formData.tags) {
-              try {
-                const translatedTag = await translateText(tag, sourceLanguage, targetLanguage);
-                translatedTags.push(translatedTag);
-              } catch (error) {
-                console.error(`Etiket çevirisi başarısız oldu: ${tag}`, error);
-                translatedTags.push(tag); // Çeviri başarısız olursa orijinal etiketi kullan
-              }
-            }
-            if (postData.tags) {
-              postData.tags[targetLanguage] = translatedTags;
-            }
+          if (formData.tags[sourceLanguage].length > 0) {
+            const translatedTagsArray = await Promise.all(
+              formData.tags[sourceLanguage].map(tag =>
+                translateText(tag, sourceLanguage, targetLanguage)
+              )
+            );
+            translatedTags = translatedTagsArray;
           }
         } catch (error) {
-          console.error('Translation error:', error);
-          throw new Error(error instanceof Error ? error.message : 'Çeviri işlemi başarısız oldu');
-        }
-      } else {
-        // Çeviri istenmiyorsa, diğer dildeki verileri ekle
-        postData.title[targetLanguage] = formData.title[targetLanguage];
-        postData.content[targetLanguage] = formData.content[targetLanguage];
-        postData.excerpt[targetLanguage] = formData.excerpt[targetLanguage] || formData.content[targetLanguage].slice(0, 200) + '...';
-        if (formData.tags.length > 0 && postData.tags) {
-          postData.tags[targetLanguage] = formData.tags;
+          console.error('Çeviri hatası:', error);
+          toast.error('Çeviri sırasında bir hata oluştu');
+          return;
         }
       }
+
+      // Slug oluştur
+      const slug = {
+        [sourceLanguage]: formData.title[sourceLanguage]
+          .toLowerCase()
+          .replace(/[^a-z0-9ğüşıöç]/g, '-')
+          .replace(/-+/g, '-')
+          .replace(/^-|-$/g, ''),
+        [targetLanguage]: translatedTitle
+          .toLowerCase()
+          .replace(/[^a-z0-9ğüşıöç]/g, '-')
+          .replace(/-+/g, '-')
+          .replace(/^-|-$/g, '')
+      };
+
+      // Her iki dildeki verileri içeren post verisi
+      const postData = {
+        title: {
+          [sourceLanguage]: formData.title[sourceLanguage],
+          [targetLanguage]: translatedTitle
+        },
+        content: {
+          [sourceLanguage]: formData.content[sourceLanguage],
+          [targetLanguage]: translatedContent
+        },
+        excerpt: {
+          [sourceLanguage]: formData.excerpt[sourceLanguage] || formData.content[sourceLanguage].slice(0, 200) + '...',
+          [targetLanguage]: translatedExcerpt
+        },
+        category: formData.category,
+        tags: {
+          [sourceLanguage]: formData.tags[sourceLanguage],
+          [targetLanguage]: translatedTags
+        },
+        image_url: formData.image_url,
+        created_at: isoDate,
+        author_id: session.user.id,
+        reading_time: parseFloat(formData.reading_time),
+        slug
+      };
+
+      console.log('Gönderilecek veri:', postData);
 
       // Yazıyı güncelle
       const response = await fetch(`/api/posts/${writingId}`, {
@@ -372,11 +482,7 @@ export default function EditWritingPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`
         },
-        body: JSON.stringify({
-          ...postData,
-          should_translate: shouldTranslate,
-          source_language: sourceLanguage
-        })
+        body: JSON.stringify(postData)
       });
 
       const data = await response.json();
@@ -482,363 +588,423 @@ export default function EditWritingPage() {
     }
   };
 
+  const turkishToEnglish: Record<string, string> = {
+    'Ğ': 'g', 'Ü': 'u', 'Ş': 's', 'İ': 'i', 'Ö': 'o', 'Ç': 'c',
+    'ğ': 'g', 'ü': 'u', 'ş': 's', 'ı': 'i', 'ö': 'o', 'ç': 'c'
+  };
+
+  const hasBothLanguages = Boolean(formData.title[targetLanguage] && formData.content[targetLanguage]);
+
   return (
-    <div className="container mx-auto py-8">
+    <div>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold">Yazıyı Düzenle</h1>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => router.back()}
-            disabled={isLoading || isDeleting}
-          >
-            İptal
-          </Button>
-        </div>
-
-        <form onSubmit={(e) => handleSubmit(e, shouldTranslate)} className="space-y-8">
-          {/* Dil Seçimi */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Dil Seçimi</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-4">
-                <Button
-                  type="button"
-                  variant={sourceLanguage === 'tr' ? 'default' : 'outline'}
-                  onClick={() => setSourceLanguage('tr')}
-                >
-                  Türkçe
-                </Button>
-                <Button
-                  type="button"
-                  variant={sourceLanguage === 'en' ? 'default' : 'outline'}
-                  onClick={() => setSourceLanguage('en')}
-                >
-                  English
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Ana Bilgiler */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Ana Bilgiler</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-12 gap-4">
-                <div className="col-span-3 space-y-2">
-                  <Label htmlFor="created_at">Tarih *</Label>
-                  <div className="relative">
-                    <Input
-                      id="created_at"
-                      type="date"
-                      value={formatDateForInput(formData.created_at)}
-                      onChange={(e) => {
-                        const formattedDate = formatDateForDisplay(e.target.value);
-                        setFormData({ ...formData, created_at: formattedDate });
-                      }}
-                      className="[&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="absolute right-0 top-0 h-full px-3 hover:bg-transparent pointer-events-none"
-                    >
-                      <Calendar className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="col-span-3 space-y-2">
-                  <Label htmlFor="category">Kategori *</Label>
-                  <Select
-                    value={formData.category}
-                    onValueChange={(value: string) => setFormData({ ...formData, category: value })}
-                  >
-                    <SelectTrigger id="category">
-                      <SelectValue placeholder="Kategori seçin" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map((category) => (
-                        <SelectItem key={category} value={category}>
-                          {category}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="col-span-6 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <Label htmlFor="title">Başlık *</Label>
-                    <span className="text-sm text-muted-foreground">
-                      {formData.title[sourceLanguage].length}/40 karakter
-                    </span>
-                  </div>
-                  <Input
-                    id="title"
-                    value={formData.title[sourceLanguage]}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      if (value.length <= 40) {
-                        setFormData({
-                          ...formData,
-                          title: { ...formData.title, [sourceLanguage]: value }
-                        });
-                      }
-                    }}
-                    placeholder={`Başlık (${sourceLanguage === 'tr' ? 'Türkçe' : 'English'})`}
-                    maxLength={40}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <Label htmlFor="excerpt">Özet</Label>
-                  <span className="text-sm text-muted-foreground">
-                    {formData.excerpt[sourceLanguage].length}/200 karakter
-                  </span>
-                </div>
-                <Textarea
-                  id="excerpt"
-                  value={formData.excerpt[sourceLanguage]}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value.length <= 200) {
-                      setFormData({
-                        ...formData,
-                        excerpt: { ...formData.excerpt, [sourceLanguage]: value }
-                      });
-                    }
-                  }}
-                  placeholder={`Özet (${sourceLanguage === 'tr' ? 'Türkçe' : 'English'})`}
-                  className="h-24 w-full"
-                  maxLength={200}
-                />
-                <p className="text-sm text-muted-foreground">
-                  Boş bırakılırsa, yazının ilk 200 karakteri otomatik olarak özet olarak kullanılacaktır.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Yazı İçeriği */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Yazı İçeriği</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <Label htmlFor="content">İçerik *</Label>
-                <Textarea
-                  id="content"
-                  value={formData.content[sourceLanguage]}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    content: { ...formData.content, [sourceLanguage]: e.target.value }
-                  })}
-                  placeholder={`İçerik (${sourceLanguage === 'tr' ? 'Türkçe' : 'English'})`}
-                  className="h-96"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Etiketler ve Okuma Süresi */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Etiketler ve Okuma Süresi</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="tags">Etiketler</Label>
-                <Input
-                  id="tags"
-                  placeholder="Etiketleri virgülle ayırarak girin"
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    tags: e.target.value.split(',').map(tag => tag.trim()).filter(Boolean)
-                  })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="reading_time">Okuma Süresi (dakika) *</Label>
-                <div className="flex gap-4 items-center">
-                  <Input
-                    id="reading_time"
-                    type="number"
-                    min="1"
-                    max="999"
-                    value={formData.reading_time}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      if (value === '' || /^[1-9]\d{0,2}$/.test(value)) {
-                        setFormData({ ...formData, reading_time: value });
-                      }
-                    }}
-                    placeholder="Örn: 5"
-                    className="w-32"
-                  />
-                  <div className="text-sm text-muted-foreground">
-                    AI Önerisi: {calculateReadingTime(formData.content[sourceLanguage])} dakika
-                    <br />
-                    <span className="text-xs">(Kelime sayısına göre hesaplanmıştır)</span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Görsel */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Görsel</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="relative aspect-video w-full max-w-2xl mx-auto overflow-hidden rounded-lg border">
-                  {isUploading ? (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                      <Loader2 className="w-8 h-8 animate-spin text-white" />
-                    </div>
-                  ) : (
-                    <img
-                      src={formData.image_url}
-                      alt="Yazı görseli"
-                      className="object-cover w-full h-full"
-                    />
-                  )}
-                </div>
-                <div className="flex justify-center">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => document.getElementById('image-upload')?.click()}
-                    disabled={isUploading}
-                  >
-                    {isUploading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Yükleniyor...
-                      </>
-                    ) : (
-                      <>
-                        <ImageIcon className="h-4 w-4 mr-2" />
-                        Görsel Seç
-                      </>
-                    )}
-                  </Button>
-                  <input
-                    id="image-upload"
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleImageUpload}
-                    disabled={isUploading}
-                  />
-                </div>
-                <p className="text-sm text-center text-muted-foreground">
-                  Maksimum dosya boyutu: 5MB. Desteklenen formatlar: JPG, PNG, GIF, WEBP
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Kaydet Butonları */}
-          <div className="flex justify-end gap-4">
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => setShowDeleteAlert(true)}
-              disabled={isLoading || isDeleting}
-            >
-              {isDeleting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Siliniyor...
-                </>
-              ) : (
-                'Sil'
-              )}
-            </Button>
+        <div className="container mx-auto py-8">
+          <div className="flex justify-between items-center mb-8">
+            <h1 className="text-3xl font-bold">Yazıyı Düzenle</h1>
             <Button
               type="button"
               variant="outline"
-              onClick={(e) => handleSubmit(e, true)}
+              onClick={() => router.back()}
               disabled={isLoading || isDeleting}
             >
-              {isLoading ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Çevriliyor...
-                </>
-              ) : (
-                'Çevir ve Kaydet'
-              )}
-            </Button>
-            <Button
-              type="button"
-              onClick={(e) => handleSubmit(e, false)}
-              disabled={isLoading || isDeleting}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Güncelleniyor...
-                </>
-              ) : (
-                'Güncelle'
-              )}
+              İptal
             </Button>
           </div>
-        </form>
 
-        <AlertDialog open={showAlert} onOpenChange={setShowAlert}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Onay</AlertDialogTitle>
-              <AlertDialogDescription>
-                {shouldTranslate
-                  ? 'Yazı kaynak dildeki içerikten çevrilecek ve kaydedilecek. Devam etmek istiyor musunuz?'
-                  : 'Yazıyı her iki dildeki mevcut içerikle kaydetmek istediğinizden emin misiniz?'}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>İptal</AlertDialogCancel>
-              <AlertDialogAction onClick={handleConfirmSubmit}>
-                {shouldTranslate ? 'Çevir ve Kaydet' : 'Kaydet'}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          <form onSubmit={(e) => handleSubmit(e, shouldTranslate)} className="space-y-8">
+            {/* Dil Seçimi */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Dil Seçimi</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-4">
+                  <Button
+                    type="button"
+                    variant={sourceLanguage === 'tr' ? 'default' : 'outline'}
+                    onClick={() => handleLanguageChange('tr')}
+                  >
+                    Türkçe
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={sourceLanguage === 'en' ? 'default' : 'outline'}
+                    onClick={() => handleLanguageChange('en')}
+                  >
+                    English
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
 
-        {/* Silme Onay Dialog'u */}
-        <AlertDialog open={showDeleteAlert} onOpenChange={setShowDeleteAlert}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Yazıyı Sil</AlertDialogTitle>
-              <AlertDialogDescription>
-                Bu yazıyı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>İptal</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                Sil
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+            {/* Ana Bilgiler */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Ana Bilgiler</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="created_at">Tarih *</Label>
+                    <div className="relative">
+                      <Input
+                        id="created_at"
+                        type="date"
+                        value={formatDateForInput(formData.created_at)}
+                        onChange={(e) => {
+                          const formattedDate = formatDateForDisplay(e.target.value);
+                          setFormData({ ...formData, created_at: formattedDate });
+                        }}
+                        className="[&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-0 top-0 h-full px-3 hover:bg-transparent pointer-events-none"
+                      >
+                        <CalendarIcon className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="category">Kategori *</Label>
+                    <Select
+                      value={formData.category}
+                      onValueChange={(value: string) => setFormData({ ...formData, category: value })}
+                    >
+                      <SelectTrigger id="category" className="w-full">
+                        <SelectValue placeholder="Kategori seçin" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map((category: string) => (
+                          <SelectItem key={category} value={category}>
+                            {category}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <Label htmlFor="title">Başlık *</Label>
+                      <span className="text-sm text-muted-foreground">
+                        {formData.title[sourceLanguage].length}/40 karakter
+                      </span>
+                    </div>
+                    <Input
+                      id="title"
+                      value={formData.title[sourceLanguage]}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value.length <= 40) {
+                          setFormData({
+                            ...formData,
+                            title: { ...formData.title, [sourceLanguage]: value }
+                          });
+                        }
+                      }}
+                      placeholder={`Başlık (${sourceLanguage === 'tr' ? 'Türkçe' : 'English'})`}
+                      maxLength={40}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <Label htmlFor="excerpt">Özet</Label>
+                    <span className="text-sm text-muted-foreground">
+                      {formData.excerpt[sourceLanguage].length}/200 karakter
+                    </span>
+                  </div>
+                  <Textarea
+                    id="excerpt"
+                    value={formData.excerpt[sourceLanguage]}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value.length <= 200) {
+                        setFormData({
+                          ...formData,
+                          excerpt: { ...formData.excerpt, [sourceLanguage]: value }
+                        });
+                      }
+                    }}
+                    placeholder={`Özet (${sourceLanguage === 'tr' ? 'Türkçe' : 'English'})`}
+                    className="h-24 w-full"
+                    maxLength={200}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Boş bırakılırsa, yazının ilk 200 karakteri otomatik olarak özet olarak kullanılacaktır.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Yazı İçeriği */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Yazı İçeriği</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <Label htmlFor="content">İçerik *</Label>
+                  <Textarea
+                    id="content"
+                    value={formData.content[sourceLanguage]}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      content: { ...formData.content, [sourceLanguage]: e.target.value }
+                    })}
+                    placeholder={`İçerik (${sourceLanguage === 'tr' ? 'Türkçe' : 'English'})`}
+                    className="h-96"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Etiketler ve Okuma Süresi */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Etiketler ve Okuma Süresi</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="tags">Etiketler ({sourceLanguage === 'tr' ? 'Türkçe' : 'English'})</Label>
+                  <Input
+                    id="tags"
+                    value={formData.tags[sourceLanguage]?.join(', ') || ''}
+                    onChange={(e) => {
+                      const tags = e.target.value.split(',').map(tag => tag.trim()).filter(Boolean);
+                      setFormData({
+                        ...formData,
+                        tags: {
+                          ...formData.tags,
+                          [sourceLanguage]: tags
+                        }
+                      });
+                    }}
+                    placeholder="Etiketleri virgülle ayırarak girin"
+                  />
+                  {formData.tags[targetLanguage]?.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-sm text-muted-foreground">
+                        {targetLanguage === 'tr' ? 'Türkçe' : 'English'} etiketler: {formData.tags[targetLanguage].join(', ')}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="reading_time">Okuma Süresi (dakika) *</Label>
+                  <div className="flex gap-4 items-center">
+                    <Input
+                      id="reading_time"
+                      type="number"
+                      min="1"
+                      max="999"
+                      value={formData.reading_time}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === '' || /^[1-9]\d{0,2}$/.test(value)) {
+                          setFormData({ ...formData, reading_time: value });
+                        }
+                      }}
+                      placeholder="Örn: 5"
+                      className="w-32"
+                    />
+                    <div className="text-sm text-muted-foreground">
+                      AI Önerisi: {calculateReadingTime(formData.content[sourceLanguage])} dakika
+                      <br />
+                      <span className="text-xs">(Kelime sayısına göre hesaplanmıştır)</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Görsel */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Görsel</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="relative aspect-video w-full max-w-2xl mx-auto overflow-hidden rounded-lg border">
+                    {isUploading ? (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                        <Loader2 className="w-8 h-8 animate-spin text-white" />
+                      </div>
+                    ) : (
+                      <img
+                        src={formData.image_url}
+                        alt="Yazı görseli"
+                        className="object-cover w-full h-full"
+                      />
+                    )}
+                  </div>
+                  <div className="flex justify-center">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => document.getElementById('image-upload')?.click()}
+                      disabled={isUploading}
+                    >
+                      {isUploading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Yükleniyor...
+                        </>
+                      ) : (
+                        <>
+                          <ImageIcon className="h-4 w-4 mr-2" />
+                          Görsel Seç
+                        </>
+                      )}
+                    </Button>
+                    <input
+                      id="image-upload"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleImageUpload}
+                      disabled={isUploading}
+                    />
+                  </div>
+                  <p className="text-sm text-center text-muted-foreground">
+                    Maksimum dosya boyutu: 5MB. Desteklenen formatlar: JPG, PNG, GIF, WEBP
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Kaydet Butonları */}
+            <div className="flex justify-end gap-4">
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => setShowDeleteAlert(true)}
+                disabled={isLoading || isDeleting}
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Siliniyor...
+                  </>
+                ) : (
+                  'Sil'
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={(e) => handleSubmit(e, true)}
+                disabled={isLoading || isDeleting}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Çevriliyor...
+                  </>
+                ) : (
+                  'Çevir ve Kaydet'
+                )}
+              </Button>
+              <Button
+                type="button"
+                onClick={(e) => handleSubmit(e, false)}
+                disabled={isLoading || isDeleting}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Güncelleniyor...
+                  </>
+                ) : (
+                  'Güncelle'
+                )}
+              </Button>
+            </div>
+          </form>
+
+          <AlertDialog open={showAlert} onOpenChange={setShowAlert}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Onay</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {shouldTranslate
+                    ? 'Yazı kaynak dildeki içerikten çevrilecek ve kaydedilecek. Devam etmek istiyor musunuz?'
+                    : 'Yazıyı her iki dildeki mevcut içerikle kaydetmek istediğinizden emin misiniz?'}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>İptal</AlertDialogCancel>
+                <AlertDialogAction onClick={handleConfirmSubmit}>
+                  {shouldTranslate ? 'Çevir ve Kaydet' : 'Kaydet'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <AlertDialog open={showDeleteAlert} onOpenChange={setShowDeleteAlert}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Yazıyı Sil</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Bu yazıyı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>İptal</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                  Sil
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <AlertDialog open={showValidationAlert} onOpenChange={setShowValidationAlert}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Eksik Alanlar</AlertDialogTitle>
+                <AlertDialogDescription>
+                  <div className="space-y-4">
+                    {validationErrors.source.length > 0 && (
+                      <div>
+                        <p className="font-medium mb-2">{sourceLanguage === 'tr' ? 'Türkçe' : 'İngilizce'} dilinde eksik alanlar:</p>
+                        <ul className="list-disc list-inside">
+                          {validationErrors.source.map((field, index) => (
+                            <li key={index}>{field}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {validationErrors.target.length > 0 && (
+                      <div>
+                        <p className="font-medium mb-2">{targetLanguage === 'tr' ? 'Türkçe' : 'İngilizce'} dilinde eksik alanlar:</p>
+                        <ul className="list-disc list-inside">
+                          {validationErrors.target.map((field, index) => (
+                            <li key={index}>{field}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogAction onClick={() => setShowValidationAlert(false)}>
+                  Tamam
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       </motion.div>
     </div>
   );
