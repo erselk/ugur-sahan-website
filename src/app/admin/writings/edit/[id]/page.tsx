@@ -2,23 +2,20 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname, useParams } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
-import { CalendarIcon, Loader2, Save, X, Image as ImageIcon } from 'lucide-react';
-import { format, parse } from 'date-fns';
-import { tr } from 'date-fns/locale';
+import { CalendarIcon, Loader2, Image as ImageIcon } from 'lucide-react';
+import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { translateText } from '@/lib/translate';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { motion } from 'framer-motion';
+import Image from 'next/image';
 
 const categories = [
   'Şiirler',
@@ -28,28 +25,11 @@ const categories = [
   'Tadımlar'
 ];
 
-// Tip tanımlamaları
-type PostData = {
-  title: { [key: string]: string };
-  content: { [key: string]: string };
-  excerpt: { [key: string]: string };
-  category: string;
-  tags: { [key: string]: string[] } | null;
-  image_url: string;
-  created_at: string;
-  author_id: string;
-  reading_time: number;
-  slug: { [key: string]: string };
-  sourceLanguage: 'tr' | 'en';
-  targetLanguage: 'tr' | 'en';
-  should_translate: boolean;
-};
-
 const EditWritingPage = () => {
   const router = useRouter();
   const pathname = usePathname();
   const params = useParams();
-  const writingId = params.id as string;
+  const writingId = params?.id as string | undefined;
   const [isLoading, setIsLoading] = useState(false);
   const [showAlert, setShowAlert] = useState(false);
   const [shouldTranslate, setShouldTranslate] = useState(false);
@@ -85,7 +65,7 @@ const EditWritingPage = () => {
           console.error('Auth error:', error);
           if (mounted) {
             toast.error('Oturum hatası: ' + error.message);
-            router.replace('/admin/login?redirect=' + encodeURIComponent(pathname));
+            router.replace('/admin/login?redirect=' + encodeURIComponent(pathname ?? ''));
           }
           return;
         }
@@ -93,7 +73,7 @@ const EditWritingPage = () => {
         if (!session) {
           if (mounted) {
             toast.error('Oturum açmanız gerekiyor');
-            router.replace('/admin/login?redirect=' + encodeURIComponent(pathname));
+            router.replace('/admin/login?redirect=' + encodeURIComponent(pathname ?? ''));
           }
           return;
         }
@@ -106,7 +86,7 @@ const EditWritingPage = () => {
         console.error('Auth check error:', error);
         if (mounted) {
           toast.error('Oturum kontrolü sırasında bir hata oluştu');
-          router.replace('/admin/login?redirect=' + encodeURIComponent(pathname));
+          router.replace('/admin/login?redirect=' + encodeURIComponent(pathname ?? ''));
         }
       }
     };
@@ -114,7 +94,7 @@ const EditWritingPage = () => {
     checkAuth();
 
     // Oturum değişikliklerini dinle
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: any) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string) => {
       if (event === 'SIGNED_OUT') {
         router.push('/admin/login');
       }
@@ -124,7 +104,7 @@ const EditWritingPage = () => {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [router]);
+  }, [router, pathname]);
 
   // Dil değişimini yöneten fonksiyon
   const handleLanguageChange = (newSourceLanguage: 'tr' | 'en') => {
@@ -139,7 +119,7 @@ const EditWritingPage = () => {
         
         if (sessionError || !session) {
           toast.error('Oturum geçersiz veya süresi dolmuş');
-          router.replace('/admin/login?redirect=' + encodeURIComponent(pathname));
+          router.replace('/admin/login?redirect=' + encodeURIComponent(pathname ?? ''));
           return;
         }
 
@@ -202,7 +182,7 @@ const EditWritingPage = () => {
     if (isAuthenticated && writingId) {
       fetchWriting();
     }
-  }, [writingId, isAuthenticated, router]);
+  }, [writingId, isAuthenticated, router, pathname]);
 
   // Oturum kontrolü yapılırken loading göster
   if (isCheckingAuth) {
@@ -211,6 +191,14 @@ const EditWritingPage = () => {
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );
+  }
+
+  // params.id yoksa yönlendir ve null dön
+  if (!writingId) {
+    if (typeof window !== 'undefined') {
+      router.push('/admin/writings');
+    }
+    return null;
   }
 
   // Oturum yoksa null dön (yönlendirme useEffect içinde yapılıyor)
@@ -296,7 +284,7 @@ const EditWritingPage = () => {
     
     if (sessionError || !session) {
       toast.error('Oturum geçersiz veya süresi dolmuş');
-      router.replace('/admin/login?redirect=' + encodeURIComponent(pathname));
+      router.replace('/admin/login?redirect=' + encodeURIComponent(pathname ?? ''));
       return;
     }
 
@@ -356,7 +344,7 @@ const EditWritingPage = () => {
       
       if (sessionError || !session) {
         toast.error('Oturum geçersiz veya süresi dolmuş');
-        router.replace('/admin/login?redirect=' + encodeURIComponent(pathname));
+        router.replace('/admin/login?redirect=' + encodeURIComponent(pathname ?? ''));
         return;
       }
 
@@ -562,7 +550,7 @@ const EditWritingPage = () => {
       
       if (sessionError || !session) {
         toast.error('Oturum geçersiz veya süresi dolmuş');
-        router.replace('/admin/login?redirect=' + encodeURIComponent(pathname));
+        router.replace('/admin/login?redirect=' + encodeURIComponent(pathname ?? ''));
         return;
       }
 
@@ -587,13 +575,6 @@ const EditWritingPage = () => {
       setShowDeleteAlert(false);
     }
   };
-
-  const turkishToEnglish: Record<string, string> = {
-    'Ğ': 'g', 'Ü': 'u', 'Ş': 's', 'İ': 'i', 'Ö': 'o', 'Ç': 'c',
-    'ğ': 'g', 'ü': 'u', 'ş': 's', 'ı': 'i', 'ö': 'o', 'ç': 'c'
-  };
-
-  const hasBothLanguages = Boolean(formData.title[targetLanguage] && formData.content[targetLanguage]);
 
   return (
     <div>
@@ -841,9 +822,11 @@ const EditWritingPage = () => {
                         <Loader2 className="w-8 h-8 animate-spin text-white" />
                       </div>
                     ) : (
-                      <img
+                      <Image
                         src={formData.image_url}
                         alt="Yazı görseli"
+                        width={1920}
+                        height={1080}
                         className="object-cover w-full h-full"
                       />
                     )}

@@ -2,8 +2,6 @@
 
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { createClient } from '@supabase/supabase-js';
-import { useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
   MessageSquare,
@@ -13,11 +11,6 @@ import {
   Settings,
   Home
 } from 'lucide-react';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 const menuItems = [
   {
@@ -54,7 +47,6 @@ const menuItems = [
 
 export default function AdminSidebar() {
   const pathname = usePathname();
-  const router = useRouter();
 
   return (
     <aside className="h-screen w-full bg-[var(--color-bg-secondary)] border-r border-[var(--color-border)]">

@@ -7,6 +7,7 @@ import { Loader2, FileText, Plus, Edit2, Search, Clock, Calendar, Eye } from 'lu
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import Link from 'next/link';
+import Image from 'next/image';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -184,18 +185,21 @@ const WritingsPage = () => {
               animate={{ opacity: 1, y: 0 }}
               className="bg-[var(--color-bg-secondary)] rounded-lg overflow-hidden"
             >
-              <div className="flex flex-col md:flex-row">
+              <div className="flex flex-col md:flex-row gap-4 p-4">
                 {/* Görsel */}
-                <div className="relative w-full md:w-48 h-48 md:h-auto">
-                  <img
+                <div className="relative w-full md:w-48 aspect-[4/3] flex-shrink-0">
+                  <Image
                     src={writing.image_url}
                     alt={writing.title.tr || writing.title.en}
-                    className="w-full h-full object-cover"
+                    fill
+                    sizes="(max-width: 768px) 100vw, 192px"
+                    className="object-cover rounded-lg"
+                    priority={false}
                   />
                 </div>
 
                 {/* İçerik */}
-                <div className="flex-1 p-6">
+                <div className="flex-1 flex flex-col justify-center min-h-[144px]">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <h2 className="text-xl font-semibold mb-2 line-clamp-2">

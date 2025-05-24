@@ -4,8 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { format, parse } from 'date-fns';
-import { tr } from 'date-fns/locale';
-import { Calendar, Clock, Image as ImageIcon, Tag, Loader2 } from 'lucide-react';
+import { Calendar, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -16,6 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { toast } from 'sonner';
 import { createBrowserClient } from '@supabase/ssr';
 import { translateText } from '@/lib/translate';
+import Image from 'next/image';
 
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -90,7 +90,7 @@ const NewWritingPage = () => {
           console.error('Auth error:', error);
           if (mounted) {
             toast.error('Oturum hatası: ' + error.message);
-            router.replace('/admin/login?redirect=' + encodeURIComponent(pathname));
+            router.replace('/admin/login?redirect=' + encodeURIComponent(pathname ?? ''));
           }
           return;
         }
@@ -98,7 +98,7 @@ const NewWritingPage = () => {
         if (!session) {
           if (mounted) {
             toast.error('Oturum açmanız gerekiyor');
-            router.replace('/admin/login?redirect=' + encodeURIComponent(pathname));
+            router.replace('/admin/login?redirect=' + encodeURIComponent(pathname ?? ''));
           }
           return;
         }
@@ -111,7 +111,7 @@ const NewWritingPage = () => {
         console.error('Auth check error:', error);
         if (mounted) {
           toast.error('Oturum kontrolü sırasında bir hata oluştu');
-          router.replace('/admin/login?redirect=' + encodeURIComponent(pathname));
+          router.replace('/admin/login?redirect=' + encodeURIComponent(pathname ?? ''));
         }
       }
     };
@@ -123,7 +123,7 @@ const NewWritingPage = () => {
       if (mounted) {
         if (event === 'SIGNED_OUT' || !session) {
           setIsAuthenticated(false);
-          router.replace('/admin/login?redirect=' + encodeURIComponent(pathname));
+          router.replace('/admin/login?redirect=' + encodeURIComponent(pathname ?? ''));
         } else if (event === 'SIGNED_IN') {
           setIsAuthenticated(true);
           setIsCheckingAuth(false);
@@ -213,7 +213,7 @@ const NewWritingPage = () => {
     
     if (sessionError || !session) {
       toast.error('Oturum geçersiz veya süresi dolmuş');
-      router.replace('/admin/login?redirect=' + encodeURIComponent(pathname));
+      router.replace('/admin/login?redirect=' + encodeURIComponent(pathname ?? ''));
       return;
     }
 
@@ -273,7 +273,7 @@ const NewWritingPage = () => {
       
       if (sessionError || !session) {
         toast.error('Oturum geçersiz veya süresi dolmuş');
-        router.replace('/admin/login?redirect=' + encodeURIComponent(pathname));
+        router.replace('/admin/login?redirect=' + encodeURIComponent(pathname ?? ''));
         return;
       }
 
@@ -734,9 +734,11 @@ const NewWritingPage = () => {
                       <Loader2 className="w-8 h-8 animate-spin text-white" />
                     </div>
                   ) : (
-                    <img
+                    <Image
                       src={formData.image_url}
                       alt="Yazı görseli"
+                      width={300}
+                      height={200}
                       className="object-cover w-full h-full"
                     />
                   )}

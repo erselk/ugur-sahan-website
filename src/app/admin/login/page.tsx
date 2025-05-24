@@ -18,7 +18,7 @@ const supabase = createBrowserClient(
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get('redirect') || '/admin';
+  const redirectTo = searchParams?.get('redirect') || '/admin';
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

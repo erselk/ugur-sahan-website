@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
-import { parse, format } from 'date-fns';
-import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { PostgrestError } from '@supabase/supabase-js';
-
-const translatorEndpoint = `https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&region=${process.env.MS_TRANSLATOR_REGION}`;
+import { cookies } from 'next/headers';
+import { format } from 'date-fns';
 
 async function translateText(text: string, sourceLanguage: string, targetLanguage: string) {
   const baseEndpoint = "https://api.cognitive.microsofttranslator.com/translate";
@@ -53,53 +51,26 @@ async function translateText(text: string, sourceLanguage: string, targetLanguag
   return translatedText;
 }
 
-async function getCookie(name: string) {
-  const cookieStore = await cookies();
-  return cookieStore.get(name)?.value;
-}
+type ApiError = {
+  message: string;
+  status: number;
+};
 
-async function setCookie(name: string, value: string, options: any) {
-  const cookieStore = await cookies();
-  cookieStore.set({ name, value, ...options });
-}
-
-async function deleteCookie(name: string, options: any) {
-  const cookieStore = await cookies();
-  cookieStore.set({ name, value: '', ...options });
-}
-
-// PostgrestError tipini genişlet
-interface ExtendedPostgrestError extends PostgrestError {
-  postgresError?: string;
-  postgresCode?: string;
-}
-
-interface PostFormData {
+type PostData = {
   title: { [key: string]: string };
-  content: { [key: string]: string };
-  excerpt?: { [key: string]: string };
-  category: string;
-  tags?: string[] | { [key: string]: string[] };  // Etiketler string[] veya { tr: string[], en: string[] } olabilir
-  image_url: string;
-  created_at: string;
-  reading_time: string | number;
-  should_translate?: boolean;
-}
-
-interface PostToInsert {
-  title: { [key: string]: string };
-  slug: string;
   content: { [key: string]: string };
   excerpt: { [key: string]: string };
   category: string;
   tags: { [key: string]: string[] } | null;
   image_url: string;
   created_at: string;
-  is_published: boolean;
-  reading_time: number;
-  views: number;
   author_id: string;
-}
+  reading_time: number;
+  slug: { [key: string]: string };
+  sourceLanguage: 'tr' | 'en';
+  targetLanguage: 'tr' | 'en';
+  should_translate: boolean;
+};
 
 async function handleTranslation(
   postData: Partial<PostToInsert>,
@@ -166,40 +137,57 @@ async function handleTranslation(
   }
 }
 
+interface PostToInsert {
+  title: { [key: string]: string };
+  slug: string;
+  content: { [key: string]: string };
+  excerpt: { [key: string]: string };
+  category: string;
+  tags: { [key: string]: string[] } | null;
+  image_url: string;
+  created_at: string;
+  is_published: boolean;
+  reading_time: number;
+  views: number;
+  author_id: string;
+}
+
 export async function POST(request: Request) {
   try {
+    const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
           get(name: string) {
-            return getCookie(name);
+            return cookieStore.get(name)?.value;
           },
-          set(name: string, value: string, options: any) {
-            return setCookie(name, value, options);
+          set(name: string, value: string, options: Record<string, unknown>) {
+            cookieStore.set({ name, value, ...options });
           },
-          remove(name: string, options: any) {
-            return deleteCookie(name, options);
+          remove(name: string, options: Record<string, unknown>) {
+            cookieStore.set({ name, value: '', ...options });
           },
         },
       }
     );
 
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
     if (sessionError || !session) {
-      return NextResponse.json({ error: 'Oturum geçersiz veya süresi dolmuş' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const formData = await request.json() as PostFormData;
-    const { title, content, excerpt: userExcerpt, category, tags, image_url, reading_time, should_translate } = formData;
+    const body = await request.json() as PostData;
+    const { title, content, excerpt: userExcerpt, category, tags, image_url, reading_time, should_translate } = body;
 
     // Debug için gelen veriyi kontrol et
     console.log('API\'ye gelen veri:', {
       should_translate,
       sourceLanguage: Object.keys(title)[0],
       tags,
-      formData: JSON.stringify(formData, null, 2)
+      formData: JSON.stringify(body, null, 2)
     });
 
     // Kaynak dil ve hedef dili belirle
@@ -258,17 +246,17 @@ export async function POST(request: Request) {
     let isoDate: string;
     try {
       // Eğer tarih zaten ISO formatındaysa (yyyy-MM-dd veya yyyy-MM-dd HH:mm:ss.SSSSSS+00)
-      if (/^\d{4}-\d{2}-\d{2}/.test(formData.created_at)) {
-        const date = new Date(formData.created_at);
+      if (/^\d{4}-\d{2}-\d{2}/.test(body.created_at)) {
+        const date = new Date(body.created_at);
         if (isNaN(date.getTime())) {
           throw new Error('Geçersiz tarih değeri');
         }
         isoDate = format(date, 'yyyy-MM-dd');
       } 
       // Eğer tarih GG.AA.YYYY formatındaysa
-      else if (/^\d{2}\.\d{2}\.\d{4}$/.test(formData.created_at)) {
+      else if (/^\d{2}\.\d{2}\.\d{4}$/.test(body.created_at)) {
         // Tarihi parçalara ayır
-        const [day, month, year] = formData.created_at.split('.').map(Number);
+        const [day, month, year] = body.created_at.split('.').map(Number);
         
         // Tarih değerlerini kontrol et
         if (isNaN(day) || isNaN(month) || isNaN(year) ||
@@ -292,7 +280,7 @@ export async function POST(request: Request) {
       }
 
       console.log('API\'de işlenen tarih:', { 
-        original: formData.created_at, 
+        original: body.created_at, 
         iso: isoDate,
         parsed: new Date(isoDate).toISOString()
       });
@@ -479,10 +467,10 @@ export async function POST(request: Request) {
       );
     }
   } catch (error) {
-    console.error('API error:', error);
+    const apiError = error as ApiError;
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Bir hata oluştu' },
-      { status: 500 }
+      { error: apiError.message || 'Internal server error' },
+      { status: apiError.status || 500 }
     );
   }
 } 

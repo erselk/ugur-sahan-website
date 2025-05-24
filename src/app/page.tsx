@@ -1,22 +1,21 @@
-"use client";
-
-import Image from "next/image";
-import Link from "next/link";
-import { useTranslation } from "@/lib/i18n/useTranslation";
-import { Button } from "@/components/ui/button";
-import { ArrowRight } from "lucide-react";
-import { Hero } from "@/components/sections/Hero";
-import { FeaturedPosts } from "@/components/sections/FeaturedPosts";
-import { Expertise } from "@/components/sections/Expertise";
+import { Hero } from '@/components/Hero';
+import Header from '@/components/Header';
+import { AboutUs } from '@/components/AboutUs';
+import { WhatWeDo } from '@/components/WhatWeDo';
+import HowWeWork from '@/components/HowWeWork';
+import RecentArticles from '@/components/RecentArticles';
+import { Footer } from '@/components/Footer';
 
 export default function Home() {
-  const { t } = useTranslation();
-
   return (
-    <main className="flex min-h-screen flex-col">
+    <main className="min-h-screen">
+      <Header />
       <Hero />
-      <FeaturedPosts />
-      <Expertise />
+      <AboutUs />
+      <WhatWeDo />
+      <HowWeWork />
+      <RecentArticles />
+      <Footer />
     </main>
   );
-} 
+}

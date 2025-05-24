@@ -2,40 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 
-async function getCookie(name: string) {
-  const cookieStore = await cookies();
-  return cookieStore.get(name)?.value;
-}
-
-async function setCookie(name: string, value: string, options: any) {
-  const cookieStore = await cookies();
-  cookieStore.set({ name, value, ...options });
-}
-
-async function deleteCookie(name: string, options: any) {
-  const cookieStore = await cookies();
-  cookieStore.set({ name, value: '', ...options });
-}
-
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
+    const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
           get(name: string) {
-            return getCookie(name);
+            return cookieStore.get(name)?.value;
           },
-          set(name: string, value: string, options: any) {
-            return setCookie(name, value, options);
+          set(name: string, value: string, options: Record<string, unknown>) {
+            cookieStore.set({ name, value, ...options });
           },
-          remove(name: string, options: any) {
-            return deleteCookie(name, options);
+          remove(name: string, options: Record<string, unknown>) {
+            cookieStore.set({ name, value: '', ...options });
           },
         },
       }
@@ -87,11 +73,7 @@ export async function GET(
 
     return NextResponse.json(data);
   } catch (error) {
-    console.error('API error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Bir hata oluştu' },
-      { status: 500 }
-    );
+    return handleError(error);
   }
 }
 
@@ -101,19 +83,20 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
           get(name: string) {
-            return getCookie(name);
+            return cookieStore.get(name)?.value;
           },
-          set(name: string, value: string, options: any) {
-            return setCookie(name, value, options);
+          set(name: string, value: string, options: Record<string, unknown>) {
+            cookieStore.set({ name, value, ...options });
           },
-          remove(name: string, options: any) {
-            return deleteCookie(name, options);
+          remove(name: string, options: Record<string, unknown>) {
+            cookieStore.set({ name, value: '', ...options });
           },
         },
       }
@@ -158,11 +141,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('API error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Bir hata oluştu' },
-      { status: 500 }
-    );
+    return handleError(error);
   }
 }
 
@@ -172,19 +151,20 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
+    const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
           get(name: string) {
-            return getCookie(name);
+            return cookieStore.get(name)?.value;
           },
-          set(name: string, value: string, options: any) {
-            return setCookie(name, value, options);
+          set(name: string, value: string, options: Record<string, unknown>) {
+            cookieStore.set({ name, value, ...options });
           },
-          remove(name: string, options: any) {
-            return deleteCookie(name, options);
+          remove(name: string, options: Record<string, unknown>) {
+            cookieStore.set({ name, value: '', ...options });
           },
         },
       }
@@ -250,10 +230,13 @@ export async function PUT(
 
     return NextResponse.json(data);
   } catch (error) {
-    console.error('API error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Bir hata oluştu' },
-      { status: 500 }
-    );
+    return handleError(error);
   }
+}
+
+async function handleError(error: unknown): Promise<NextResponse<{ error: string }>> {
+  if (error instanceof Error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  return NextResponse.json({ error: 'Bilinmeyen bir hata oluştu' }, { status: 500 });
 } 

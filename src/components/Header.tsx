@@ -1,263 +1,98 @@
-"use client";
-import Link from "next/link";
-import Image from "next/image";
-import { usePathname } from "next/navigation";
-import { useContext, useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Sun, Moon, Languages, ChevronDown } from "lucide-react";
-import { LanguageContext } from "./LanguageContext";
-import { GB, TR } from 'country-flag-icons/react/3x2';
-import { useTranslation, TranslationKey } from "@/lib/i18n/useTranslation";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import Image from 'next/image';
+import { colors } from '@/styles/colors';
 
-// Tailwind className birleştirici yardımcı fonksiyon
-function cn(...classes: (string | false | undefined | null)[]) {
-  return classes.filter(Boolean).join(" ");
-}
-
-const navItems = [
-  { key: "nav.about", href: "/about" },
-  { 
-    key: "nav.writings",
-    href: "/writings",
-    subItems: [
-      { key: "nav.poems", href: "/poems" },
-      { key: "nav.memories", href: "/memories" },
-      { key: "nav.essays", href: "/essays" },
-      { key: "nav.innovation", href: "/innovation" },
-      { key: "nav.tasting", href: "/tasting" },
-    ]
-  },
-  { key: "nav.projects", href: "/projects" },
-  { key: "nav.contact", href: "/contact" },
-];
-
-export function Header() {
-  const pathname = usePathname();
-  const { language, setLanguage } = useContext(LanguageContext);
-  const { t } = useTranslation();
-  const [isDark, setIsDark] = useState<boolean | null>(null);
-  const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
-  const [hoveredItem, setHoveredItem] = useState<string | null>(null);
-
-  // Tema değiştirme fonksiyonu
-  const toggleTheme = () => {
-    const newTheme = !isDark;
-    setIsDark(newTheme);
-    
-    if (newTheme) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-    
-    localStorage.setItem('theme', newTheme ? 'dark' : 'light');
-  };
-
-  // Dil değiştirme için
-  const toggleLanguage = () => {
-    const newLang = language === "tr" ? "en" : "tr";
-    setLanguage(newLang);
-    setIsLanguageMenuOpen(false);
-    localStorage.setItem("language", newLang);
-  };
-
-  // İlk yüklemede tema ayarlarını yükle
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme');
-    
-    if (savedTheme) {
-      const isDarkMode = savedTheme === 'dark';
-      setIsDark(isDarkMode);
-      if (isDarkMode) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-        } else {
-      // İlk yüklemede tarayıcı temasını kullan
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      setIsDark(prefersDark);
-      if (prefersDark) {
-        document.documentElement.classList.add('dark');
-        }
-      localStorage.setItem('theme', prefersDark ? 'dark' : 'light');
-    }
-  }, []);
-
-  // Dil ayarları için ayrı bir useEffect
-  useEffect(() => {
-    const savedLanguage = localStorage.getItem("language");
-    const browserLang = navigator.language.split("-")[0];
-    
-    if (savedLanguage === "tr" || savedLanguage === "en") {
-      setLanguage(savedLanguage);
-    } else {
-      setLanguage(browserLang === "tr" ? "tr" : "en");
-    }
-  }, [setLanguage]);
-
+const Header = () => {
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-20 items-center justify-between px-8">
-      {/* Logo */}
-        <motion.div 
-          initial={{ x: -40, opacity: 0 }} 
-          animate={{ x: 0, opacity: 1 }} 
-          transition={{ type: "spring", stiffness: 100 }}
-        >
-        <Link href="/">
-            <Image 
-              src="/logo.svg" 
-              alt="logo" 
-              width={64} 
-              height={64} 
-              className="rounded-full transition-colors dark:invert dark:brightness-200" 
-            />
-        </Link>
-      </motion.div>
-
-      {/* Navigasyon */}
-        <motion.nav 
-          initial={{ scale: 0.8, opacity: 0 }} 
-          animate={{ scale: 1, opacity: 1 }} 
-          transition={{ type: "spring", delay: 0.2 }}
-          className="hidden md:flex items-center gap-6"
-        >
-          {navItems.map((item) => (
-            <motion.div 
-              key={item.href} 
-              whileHover={{ scale: 1.05 }} 
-              whileTap={{ scale: 0.95 }}
-              onMouseEnter={() => item.subItems && setHoveredItem(item.href)}
-              onMouseLeave={() => setHoveredItem(null)}
-              className="relative"
-            >
-              {item.subItems ? (
-                <div className="relative">
-                  <Button
-                    variant="ghost"
-                    asChild
-                    className={cn(
-                      "px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                      pathname.startsWith(item.href)
-                        ? "bg-primary text-primary-foreground"
-                        : "hover:bg-accent hover:text-accent-foreground"
-                    )}
-                  >
-                    <Link href={item.href}>
-                      {t(item.key as TranslationKey)}
-                    </Link>
-                  </Button>
-                  <AnimatePresence>
-                    {hoveredItem === item.href && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 10 }}
-                        transition={{ duration: 0.15 }}
-                        className="absolute left-0 mt-2 w-48 rounded-md border bg-popover shadow-md z-50"
-                        onMouseEnter={() => setHoveredItem(item.href)}
-                        onMouseLeave={() => setHoveredItem(null)}
-                      >
-                        <div className="py-1">
-                          {item.subItems.map((subItem) => (
-                            <Link
-                              key={subItem.href}
-                              href={subItem.href}
-                              className={cn(
-                                "block px-4 py-2 text-sm transition-colors",
-                                pathname === subItem.href
-                                  ? "bg-accent text-accent-foreground"
-                                  : "hover:bg-accent hover:text-accent-foreground"
-                              )}
-                            >
-                              {t(subItem.key as TranslationKey)}
-                            </Link>
-                          ))}
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              ) : (
-                <Button
-                  variant="ghost"
-                  asChild
-                  className={cn(
-                    "px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                    pathname === item.href
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-accent hover:text-accent-foreground"
-                  )}
-                >
-                  <Link href={item.href}>
-                    {t(item.key as TranslationKey)}
-                  </Link>
-                </Button>
-              )}
-            </motion.div>
-          ))}
-        </motion.nav>
-
-      {/* Sağ: Gece modu ve dil switch */}
-        <motion.div 
-          initial={{ x: 40, opacity: 0 }} 
-          animate={{ x: 0, opacity: 1 }} 
-          transition={{ type: "spring", stiffness: 100, delay: 0.3 }}
-          className="flex items-center gap-4"
-        >
-        {/* Gece modu butonu */}
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
-          onClick={toggleTheme}
-            className="p-2 rounded-full hover:bg-[var(--color-border)] transition-colors flex items-center justify-center"
-            aria-label={t('common.toggleTheme')}
-        >
-          <motion.span
-              key={isDark ? 'moon' : 'sun'}
-            initial={{ rotate: 0, scale: 0.8, opacity: 0 }}
-            animate={{ rotate: 360, scale: 1, opacity: 1 }}
-            transition={{ type: "spring", stiffness: 200 }}
-          >
-              {isDark ? (
-                <Moon className="w-6 h-6" />
-              ) : (
-                <Sun className="w-6 h-6" />
-              )}
-          </motion.span>
-          </motion.button>
-
-          {/* Dil switch */}
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={toggleLanguage}
-            className="p-2 rounded-full hover:bg-[var(--color-border)] transition-colors flex items-center justify-center"
-            aria-label={t('nav.language.switch')}
-          >
-            <motion.span
-              key={language}
-              initial={{ rotate: 0, scale: 0.8, opacity: 0 }}
-              animate={{ rotate: 360, scale: 1, opacity: 1 }}
-              transition={{ type: "spring", stiffness: 200 }}
-            >
-              {language === "tr" ? (
-                <TR className="w-5 h-5" />
-              ) : (
-                <GB className="w-5 h-5" />
-              )}
-            </motion.span>
-          </motion.button>
-        </motion.div>
+    <header className="w-[1920px] h-[178px] bg-[#090B1E]">
+      {/* Üst Bölüm */}
+      <div className="w-full h-[50px] flex justify-between items-center px-8">
+        <div className="text-white font-['DM_Sans'] text-[18px] font-normal leading-normal tracking-[0.72px]">
+          Mon - Sun: 09.00 - 18.00
         </div>
+        
+        <div className="flex items-center gap-8">
+          <div className="flex items-center gap-2">
+            <Image src="/images/mail.svg" alt="Email" width={24} height={24} />
+            <span className="text-white font-['DM_Sans'] text-[18px] font-normal leading-normal tracking-[0.36px]">
+              info@igual.com
+            </span>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Image src="/images/location_on.svg" alt="Location" width={24} height={24} />
+            <span className="text-white font-['DM_Sans'] text-[18px] font-normal leading-normal tracking-[0.54px]">
+              4b, Walse Street, USA
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Alt Bölüm */}
+      <div className="w-full h-[128px] flex items-center">
+        {/* Logo Bölümü */}
+        <div className="w-[266px] h-[128px] border border-[#E0E0E0] flex items-center justify-center">
+          <Image 
+            src="/images/logo.svg" 
+            alt="Logo" 
+            width={169} 
+            height={169} 
+            className="flex-shrink-0 -mt-4"
+          />
+        </div>
+
+        {/* Navigasyon ve İletişim Bölümü */}
+        <div className="w-[1655px] h-[128px] border border-[#E0E0E0] flex items-center justify-between px-[43px]">
+          {/* Navigasyon */}
+          <nav className="flex items-center gap-[79px]">
+            <div className="relative">
+              <a href="#" className="relative text-[#BA9881] font-['DM_Sans'] text-[17px] font-medium leading-normal tracking-[1.87px] inline-block">
+                HOME
+              </a>
+              <div className="absolute w-[25px] h-[22px]" style={{ left: '-7px', top: '-3.5px', backgroundColor: colors.primary.brown, opacity: 0.4, borderRadius: '0 8px 0 8px' }} />
+            </div>
+            <a href="#" className="text-white font-['DM_Sans'] text-[17px] font-medium leading-normal tracking-[1.87px]">
+              PAGES
+            </a>
+            <a href="#" className="text-white font-['DM_Sans'] text-[17px] font-medium leading-normal tracking-[1.87px]">
+              PRACTICE AREAS
+            </a>
+            <a href="#" className="text-white font-['DM_Sans'] text-[17px] font-medium leading-normal tracking-[1.87px]">
+              FEATURES
+            </a>
+            <a href="#" className="text-white font-['DM_Sans'] text-[17px] font-medium leading-normal tracking-[1.87px]">
+              BLOG
+            </a>
+            <a href="#" className="text-white font-['DM_Sans'] text-[17px] font-medium leading-normal tracking-[1.87px]">
+              CONTACT US
+            </a>
+          </nav>
+
+          {/* İletişim ve Arama */}
+          <div className="flex items-center">
+            <div className="flex items-center">
+              <Image 
+                src="/images/Phone forwarded.svg" 
+                alt="Phone" 
+                width={21} 
+                height={21} 
+                className="flex-shrink-0"
+              />
+              <span className="text-white font-['DM_Sans'] text-[23px] font-normal leading-normal tracking-[1.38px] ml-[11px]">
+                +(528) 456-7592
+              </span>
+              <Image 
+                src="/images/search.svg" 
+                alt="Search" 
+                width={28} 
+                height={28} 
+                className="ml-[25px]"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
     </header>
   );
-} 
+};
+
+export default Header;

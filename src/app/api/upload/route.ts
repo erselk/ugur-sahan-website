@@ -1,12 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 import { v4 as uuidv4 } from 'uuid';
 import sharp from 'sharp';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 export async function POST(request: Request) {
   try {
@@ -15,48 +11,39 @@ export async function POST(request: Request) {
     
     if (!file) {
       return NextResponse.json(
-        { error: 'Dosya bulunamadı' },
+        { success: false, error: 'Dosya bulunamadı' },
         { status: 400 }
       );
     }
 
-    // Dosya tipini kontrol et
-    if (!file.type.startsWith('image/')) {
-      return NextResponse.json(
-        { error: 'Sadece görsel dosyaları yüklenebilir' },
-        { status: 400 }
-      );
-    }
-
-    // Dosya boyutunu kontrol et (5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      return NextResponse.json(
-        { error: 'Dosya boyutu 5MB\'dan küçük olmalıdır' },
-        { status: 400 }
-      );
-    }
-
-    // Dosyayı ArrayBuffer'a dönüştür
     const buffer = Buffer.from(await file.arrayBuffer());
+    const fileName = `${uuidv4()}.webp`;
 
     // WebP'ye dönüştür ve optimize et
     const webpBuffer = await sharp(buffer)
-      .webp({ 
-        quality: 80,
-        effort: 6 // Daha iyi sıkıştırma için
-      })
+      .webp({ quality: 80 })
       .resize(1920, 1080, {
         fit: 'inside',
         withoutEnlargement: true
       })
       .toBuffer();
 
-    const fileName = `${uuidv4()}.webp`;
-    const filePath = `uploads/${fileName}`;
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          }
+        }
+      }
+    );
 
-    const { data, error } = await supabase.storage
-      .from('post-images')
-      .upload(filePath, webpBuffer, {
+    const { error } = await supabase.storage
+      .from('images')
+      .upload(fileName, webpBuffer, {
         contentType: 'image/webp',
         cacheControl: '3600',
         upsert: false
@@ -65,23 +52,23 @@ export async function POST(request: Request) {
     if (error) {
       console.error('Upload error:', error);
       return NextResponse.json(
-        { error: 'Dosya yüklenirken bir hata oluştu' },
+        { success: false, error: 'Dosya yüklenirken bir hata oluştu' },
         { status: 500 }
       );
     }
 
     const { data: { publicUrl } } = supabase.storage
-      .from('post-images')
-      .getPublicUrl(filePath);
+      .from('images')
+      .getPublicUrl(fileName);
 
-    return NextResponse.json({ 
-      url: publicUrl,
-      message: 'Görsel başarıyla WebP formatına dönüştürülüp yüklendi'
+    return NextResponse.json({
+      success: true,
+      url: publicUrl
     });
   } catch (error) {
-    console.error('Server error:', error);
+    console.error('Upload error:', error);
     return NextResponse.json(
-      { error: 'Sunucu hatası' },
+      { success: false, error: 'Dosya yüklenirken bir hata oluştu' },
       { status: 500 }
     );
   }

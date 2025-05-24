@@ -6,7 +6,6 @@ import { createClient } from '@supabase/supabase-js';
 import {
   MessageSquare,
   FileText,
-  Users,
   Eye,
   TrendingUp,
   Loader2
